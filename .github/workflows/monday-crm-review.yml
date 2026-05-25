@@ -1,0 +1,32 @@
+name: Monday CRM Review
+
+on:
+  schedule:
+    # Every Monday at 8:00 AM UTC
+    - cron: '0 8 * * 1'
+  workflow_dispatch: {}
+
+jobs:
+  crm-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: anthropics/claude-code-action@beta
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          allowed_tools: "mcp__monday-com__get_user_context,mcp__monday-com__get_board_items_page,mcp__monday-com__get_board_info"
+          prompt: |
+            Today is a Monday. Pull the active deals from the Monday.com CRM (board IDs: Deals=5095967347, Leads=5095967344) and produce a concise weekly CRM briefing with one tangible action per customer.
+
+            Group by urgency:
+            1. URGENT — decisions overdue (close date already passed, stage is Propuesta/Negociación)
+            2. CLOSING THIS WEEK — close date within 7 days
+            3. PROPOSALS OUTSTANDING — follow-up needed
+            4. NEW DEALS — first action required
+            5. UPCOMING DEADLINES — prepare now (close date 2–6 weeks out)
+            6. SCHEDULED — no action needed
+
+            For each deal include: company, contact name, value, close date, and one specific action sentence.
+            Flag any deals with no contact person on record.
+            Keep the total output under 60 lines.
