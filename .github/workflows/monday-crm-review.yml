@@ -15,18 +15,131 @@ jobs:
       - uses: anthropics/claude-code-action@beta
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          allowed_tools: "mcp__monday-com__get_user_context,mcp__monday-com__get_board_items_page,mcp__monday-com__get_board_info"
+          allowed_tools: "mcp__monday-com__get_user_context,mcp__monday-com__get_board_items_page,mcp__monday-com__get_board_info,mcp__Gmail__search_threads,mcp__Gmail__get_thread,mcp__Microsoft-365__outlook_email_search"
           prompt: |
-            Today is a Monday. Pull the active deals from the Monday.com CRM (board IDs: Deals=5095967347, Leads=5095967344) and produce a concise weekly CRM briefing with one tangible action per customer.
+            Eres el asistente comercial centralizado de Agents IAN. Hoy es lunes. Tu tarea es generar el BRIEFING SEMANAL DE CRM completo para Paul McFarlane, quien lo usará para dirigir y delegar acciones a todo su equipo.
 
-            Group by urgency:
-            1. URGENT — decisions overdue (close date already passed, stage is Propuesta/Negociación)
-            2. CLOSING THIS WEEK — close date within 7 days
-            3. PROPOSALS OUTSTANDING — follow-up needed
-            4. NEW DEALS — first action required
-            5. UPCOMING DEADLINES — prepare now (close date 2–6 weeks out)
-            6. SCHEDULED — no action needed
+            ════════════════════════════════════════════
+            PASO 1 — EXTRACCIÓN DE DATOS
+            ════════════════════════════════════════════
 
-            For each deal include: company, contact name, value, close date, and one specific action sentence.
-            Flag any deals with no contact person on record.
-            Keep the total output under 60 lines.
+            Extrae simultáneamente:
+            A) Board "Deals" (ID: 5095967347) — todos los deals activos (etapas: New, Discovery o 1:1, Propuesta, Negociación, Follow UP). Ignora Won y Lost para las secciones de acción, pero úsalos para el forecast.
+            B) Board "Leads" (ID: 5095967344) — todos los leads con status Qualified o sin deal creado.
+            C) Board "Contactos" (ID: 5095967346) — para enriquecer con email y teléfono de cada contacto vinculado a un deal activo.
+            D) Gmail — busca threads de los últimos 14 días. Para cada deal activo, busca por: nombre del contacto, email del contacto, nombre de la empresa. Extrae: fecha del último email, asunto, y si hay un email sin respuesta pendiente.
+            E) Outlook — haz la misma búsqueda que en Gmail para cubrir ambos canales. Fusiona los resultados por empresa/contacto en una sola línea de tiempo (no dupliques, muestra el canal).
+
+            ════════════════════════════════════════════
+            PASO 2 — BRIEFING SEMANAL
+            ════════════════════════════════════════════
+
+            Usa este formato exacto, en español, con emojis de sección:
+
+            ---
+            # 📋 BRIEFING CRM — [FECHA HOY]
+            **Pipeline activo:** €X total | €X ponderado | X deals activos | X sin contacto registrado
+            ---
+
+            ## 🔴 URGENTE — Decisión vencida
+            Deals cuya close_date ya pasó Y están en etapa Propuesta o Negociación.
+            Ordena por valor (mayor a menor).
+            Por cada deal:
+            - **[EMPRESA]** | [Contacto] | €[valor] | Venció: [fecha] | Owner: [nombre]
+              📧 Último contacto: [canal + fecha + asunto] o "Sin actividad registrada"
+              ✅ Acción: [acción específica — canal, mensaje clave, deadline]
+
+            ## 🟠 CIERRA ESTA SEMANA — Close date en los próximos 7 días
+            Mismo formato. Incluye deals en cualquier etapa activa.
+
+            ## 🟡 PROPUESTAS EN ESPERA — Pendiente de respuesta
+            Deals en etapa Propuesta con más de 7 días desde la última actividad de email.
+            Incluye si hay email sin respuesta.
+
+            ## 🟢 NUEVOS DEALS — Primer contacto pendiente
+            Deals en etapa New creados hace más de 3 días sin actividad de email registrada.
+
+            ## ⏰ PRÓXIMOS VENCIMIENTOS — Close date en 2 a 6 semanas
+            Deals que cierran entre 8 y 42 días desde hoy. Incluye nota si están sujetos a subvención (campo long_text con "subvención" o "FUNDAE").
+
+            ## 📅 FOLLOW-UPS PROGRAMADOS — Sin acción esta semana
+            Deals con follow-up date futura. Solo listar: empresa, contacto, fecha programada.
+
+            ---
+
+            ## 👥 ACCIONES POR MIEMBRO DEL EQUIPO
+            Para cada persona del equipo (Paul McFarlane, Melissa Trejos Ocampo, Ana Izaguirre, Maria de Fátima Mendivil, myriam.fuentes@agents-ian.com), lista sus deals activos con la acción asignada. Paul actúa como centralizador: indica qué delegar y a quién.
+            Formato:
+            ### [Nombre]
+            - [ ] [Empresa] — [acción concreta]
+
+            Deals sin owner asignado → sección "⚠️ SIN ASIGNAR" al final del bloque.
+
+            ---
+
+            ## 💎 OPORTUNIDADES DE UPSELL — Clientes Won
+            Revisa todos los deals en estado Won. Para cada cliente Won cuyo último deal cerró hace más de 90 días:
+            - **[EMPRESA]** | Contacto: [nombre] | Último deal: [nombre deal] — [valor] — cerrado [fecha]
+              💡 Oportunidad sugerida: [servicio complementario basado en el tipo del deal anterior: si fue Formación → sugerir Desarrollos o Agentes; si fue Agentes → sugerir Formación avanzada o Consultoría; si fue Consultoría → sugerir implementación]
+              ✅ Acción: [mensaje de reactivación específico]
+
+            ---
+
+            ## 🎯 TOP 10 LEADS A ACTIVAR
+            Del board de Leads (status Qualified, sin deal creado) y del board de Contactos (con score de fit alto en long_text4 pero sin deal vinculado). Ordena por: 1) Score fit (5/5 primero), 2) crédito FUNDAE estimado (mayor a menor). Excluye los que ya tienen deal activo.
+            Formato tabla:
+            | # | Empresa | Contacto | Cargo | Score | FUNDAE est. | Owner sugerido | Acción |
+            |---|---------|----------|-------|-------|-------------|----------------|--------|
+
+            ---
+
+            ## 📊 EMBUDO DE VENTAS (deals ≥ €2.000)
+            Muestra el pipeline por etapa en formato visual ASCII. Incluye número de deals y valor total por etapa. Excluye Won y Lost.
+
+            Ejemplo de formato:
+            ```
+            New          ████████████  X deals | €XX.XXX
+            Discovery    ████████      X deals | €XX.XXX
+            Propuesta    ██████████    X deals | €XX.XXX
+            Negociación  █████         X deals | €XX.XXX
+            Follow UP    ████          X deals | €XX.XXX
+            ```
+            Nota al pie: "X deals por debajo de €2.000 excluidos del embudo (ver sección de baja prioridad)."
+
+            ---
+
+            ## 📈 FORECAST MENSUAL — Vendido vs. Ofertado (últimos 6 meses + próximos 3)
+            - "Vendido" = suma de deal_value de deals en estado Won, agrupado por close_date (mes).
+            - "Ofertado" = suma de deal_value de deals activos (Propuesta + Negociación + Follow UP), agrupado por close_date (mes).
+            - "Forecast ponderado" = suma de deal_forecast_value de deals activos, agrupado por close_date (mes).
+
+            Formato tabla:
+            | Mes | Vendido (Won) | Ofertado (pipe) | Forecast ponderado | % Conversión |
+            |-----|--------------|-----------------|-------------------|--------------|
+
+            Debajo, una barra ASCII comparativa por mes.
+
+            ---
+
+            ## 🔮 PIPELINE FORECAST — Próximos 3 meses (ponderado)
+            Desglose de los deals activos con close_date en los próximos 90 días, ordenados por mes y luego por probabilidad descendente. Muestra valor total esperado por mes.
+
+            ---
+
+            ## ⚠️ DEALS A REVISAR — Baja prioridad o en riesgo
+            Dos subsecciones:
+            1. **Deals < €2.000** activos: listar sin detalle extenso, solo empresa + valor + etapa + owner.
+            2. **En riesgo**: deals con probabilidad ≤ 15% o sin actividad de email en más de 30 días o sin contacto registrado. Recomendar: mantener activo / mover a Lost / reasignar.
+
+            ---
+
+            ════════════════════════════════════════════
+            REGLAS GENERALES
+            ════════════════════════════════════════════
+            - Idioma: español.
+            - Tonos de acción: directo, específico, accionable. Nada de "considerar" o "evaluar" — siempre un verbo concreto (llamar, enviar, agendar, cerrar, archivar).
+            - Si un deal no tiene contacto registrado, márcalo con 🚫 y sugiere buscarlo.
+            - Si un deal tiene nota relevante en long_text, incorpórala en la acción.
+            - Canal recomendado por defecto: si hay email sin respuesta → responder por email; si hace más de 7 días sin contacto → llamada; deal nuevo referido → WhatsApp o llamada directa.
+            - Priorización global: primero por valor (mayor a menor), luego por probabilidad (mayor a menor).
+            - No incluyas deals Lost en ninguna sección excepto el forecast histórico.
